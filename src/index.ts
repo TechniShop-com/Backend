@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { productsRouter } from './routes/products.js';
 import { cartRouter } from './routes/cart.js';
 import { ordersRouter } from './routes/orders.js';
+import { authRouter } from './routes/auth.js';
 import { prisma } from './db.js';
 import { seed } from './seed.js';
 
@@ -29,6 +30,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/products', productsRouter);
 app.use('/api/cart', cartRouter);
 app.use('/api/orders', ordersRouter);
+app.use('/api/auth', authRouter);
 
 // Start serwera
 async function startServer() {
