@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id          String     @id
+  title       String
+  description String
+  price       Float
+  brand       String     // "TECHNI_SCHOOLS" | "TECHNI_ZDALNI"
+  gender      String     // "WOMEN" | "MEN" | "UNISEX"
+  colors      String     // JSON tablica: np. '["Fioletowa", "Czarna"]'
+  sizes       String     // JSON tablica: np. '["S", "M", "L"]'
+  imageUrl    String
+  createdAt   DateTime   @default(now())
+  cartItems   CartItem[]
+}
+
+model CartItem {
+  id            Int      @id @default(autoincrement())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  selectedColor String
+  selectedSize  String
+  quantity      Int      @default(1)
+  createdAt     DateTime @default(now())
+}
+
+model Order {
+  id            Int      @id @default(autoincrement())
+  customerName  String
+  email         String
+  address       String
+  paymentMethod String
+  totalPrice    Float
+  items         String   // JSON tablica pozycji zamówienia
+  status        String   @default("PENDING") // PENDING, PAID, COMPLETED
+  createdAt     DateTime @default(now())
+}
