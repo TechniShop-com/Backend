@@ -119,6 +119,73 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/auth/google - Logowanie i rejestracja przez Google
+authRouter.post('/google', async (req: Request, res: Response) => {
+  try {
+    const { email, name, avatarUrl } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Brak adresu email z konta Google' });
+    }
+
+    const normalizedEmail = String(email).toLowerCase().trim();
+    const displayName = String(name || email.split('@')[0]).trim();
+
+    let user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    let isNewUser = false;
+
+    if (!user) {
+      // Rejestracja nowego użytkownika z danymi pobranymi od Google
+      isNewUser = true;
+      const randomPassword = crypto.randomBytes(32).toString('hex');
+      const finalAvatar = avatarUrl || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(displayName)}&backgroundColor=b6e3f4,c0aede,d1d4f9`;
+
+      user = await prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          name: displayName,
+          password: hashPassword(randomPassword),
+          avatarUrl: finalAvatar,
+        },
+      });
+
+      // Powiadomienie e-mail o rejestracji (non-blocking)
+      sendRegistrationEmail(user.email, user.name).catch((err) => {
+        console.error('Błąd wysyłki maila powitalnego Google:', err);
+      });
+    } else {
+      // Jeśli użytkownik nie ma jeszcze avatara, a Google go podaje, zaktualizujmy go
+      if (!user.avatarUrl && avatarUrl) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { avatarUrl },
+        });
+      }
+
+      // Powiadomienie e-mail o logowaniu (non-blocking)
+      sendLoginNotificationEmail(user.email, user.name).catch((err) => {
+        console.error('Błąd wysyłki maila o logowaniu Google:', err);
+      });
+    }
+
+    return res.json({
+      message: isNewUser ? 'Pomyślnie zarejestrowano przez Google' : 'Logowanie przez Google udane',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+      },
+    });
+  } catch (error) {
+    console.error('Błąd logowania przez Google:', error);
+    return res.status(500).json({ error: 'Wystąpił błąd podczas logowania przez Google' });
+  }
+});
+
 // GET /api/auth/user/:id - Szczegóły profilu użytkownika
 authRouter.get('/user/:id', async (req: Request, res: Response) => {
   try {
