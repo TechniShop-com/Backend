@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { prisma } from '../db.js';
+import { sendRegistrationEmail, sendLoginNotificationEmail } from '../services/email.js';
 
 export const authRouter = Router();
 
@@ -64,6 +65,11 @@ authRouter.post('/register', async (req: Request, res: Response) => {
       },
     });
 
+    // Wysłanie maila powitalnego o pomyślnej rejestracji (non-blocking)
+    sendRegistrationEmail(newUser.email, newUser.name).catch((err) => {
+      console.error('Błąd asynchronicznej wysyłki maila rejestracyjnego:', err);
+    });
+
     return res.status(201).json({
       message: 'Rejestracja zakończona sukcesem',
       user: newUser,
@@ -92,6 +98,11 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     if (!user || !verifyPassword(password, user.password)) {
       return res.status(401).json({ error: 'Nieprawidłowy adres email lub hasło' });
     }
+
+    // Wysłanie powiadomienia email o pomyślnym zalogowaniu (non-blocking)
+    sendLoginNotificationEmail(user.email, user.name).catch((err) => {
+      console.error('Błąd asynchronicznej wysyłki maila o logowaniu:', err);
+    });
 
     return res.json({
       message: 'Logowanie udane',
@@ -130,5 +141,80 @@ authRouter.get('/user/:id', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Błąd pobierania danych użytkownika:', error);
     return res.status(500).json({ error: 'Wystąpił błąd serwera' });
+  }
+});
+
+// PUT /api/auth/user/:id - Aktualizacja danych profilu użytkownika
+authRouter.put('/user/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, email, avatarUrl, password, newPassword, currentPassword } = req.body;
+
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!existingUser) {
+      return res.status(404).json({ error: 'Nie znaleziono użytkownika' });
+    }
+
+    // Jeśli zmieniany jest email, sprawdzamy unikalność
+    if (email && email.toLowerCase() !== existingUser.email.toLowerCase()) {
+      const emailTaken = await prisma.user.findFirst({
+        where: {
+          email: email.toLowerCase(),
+          NOT: { id },
+        },
+      });
+
+      if (emailTaken) {
+        return res.status(400).json({ error: 'Podany adres email jest już zajęty przez inne konto' });
+      }
+    }
+
+    const dataToUpdate: Record<string, any> = {};
+    if (typeof name === 'string' && name.trim()) {
+      dataToUpdate.name = name.trim();
+    }
+    if (typeof email === 'string' && email.trim()) {
+      dataToUpdate.email = email.toLowerCase().trim();
+    }
+    if (typeof avatarUrl === 'string') {
+      dataToUpdate.avatarUrl = avatarUrl;
+    }
+
+    const targetPassword = password || newPassword;
+    if (targetPassword) {
+      if (typeof targetPassword !== 'string' || targetPassword.length < 6) {
+        return res.status(400).json({ error: 'Hasło musi mieć co najmniej 6 znaków' });
+      }
+      if (currentPassword && !verifyPassword(currentPassword, existingUser.password)) {
+        return res.status(400).json({ error: 'Aktualne hasło jest niepoprawne' });
+      }
+      dataToUpdate.password = hashPassword(targetPassword);
+    }
+
+    dataToUpdate.updatedAt = new Date();
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: dataToUpdate,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatarUrl: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.json({
+      message: 'Profil został pomyślnie zaktualizowany',
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error('Błąd aktualizacji danych użytkownika:', error);
+    return res.status(500).json({ error: 'Wystąpił błąd podczas aktualizacji danych użytkownika' });
   }
 });
