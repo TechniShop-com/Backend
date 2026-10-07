@@ -1,36 +1,11 @@
-import express from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
-import { productsRouter } from './routes/products.js';
-import { cartRouter } from './routes/cart.js';
-import { ordersRouter } from './routes/orders.js';
-import { authRouter } from './routes/auth.js';
 import { prisma } from './db.js';
 import { seed } from './seed.js';
+import { app } from './app.js';
 
 dotenv.config();
 
-const app = express();
 const PORT = process.env.PORT || 5000;
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// Endpoint statusu / health check
-app.get('/api/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'TechniShop API działa prawidłowo',
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// Rejestracja tras API
-app.use('/api/products', productsRouter);
-app.use('/api/cart', cartRouter);
-app.use('/api/orders', ordersRouter);
-app.use('/api/auth', authRouter);
 
 // Start serwera
 async function startServer() {
@@ -55,4 +30,6 @@ async function startServer() {
   }
 }
 
-startServer();
+if (process.env.VERCEL !== '1') {
+  startServer();
+}
